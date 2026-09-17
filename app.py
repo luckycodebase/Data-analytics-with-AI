@@ -234,7 +234,7 @@ def render_eda(df: pd.DataFrame):
 
 def render_comparison(df: pd.DataFrame):
     st.subheader("Asset Comparison")
-    metric = st.selectbox("Metric", ["avg_daily_return", "avg_volatility", "avg_market_cap", "total_return"])
+    metric = st.selectbox("Metric", ["avg_return", "avg_volatility", "avg_market_cap", "total_return"])
     top_n = st.slider("Top N coins", 5, 20, 10)
 
     comparison = get_market_comparison(df)
@@ -260,19 +260,24 @@ def render_prediction(df: pd.DataFrame):
     model = prepared["model"]
     feature_cols = prepared["feature_cols"]
     all_data = prepared["df"]
+    forecast_date = pd.Timestamp.today().normalize() + pd.Timedelta(days=1)
 
     coin_select = st.selectbox("Choose coin", sorted(all_data["coin_id"].unique()))
-    selected_date = st.selectbox(
-        "Choose a date",
-        sorted(all_data.loc[all_data["coin_id"] == coin_select, "date"].dt.strftime("%Y-%m-%d").unique())[-30:],
-    )
 
-    row = all_data[(all_data["coin_id"] == coin_select) & (all_data["date"].dt.strftime("%Y-%m-%d") == selected_date)].iloc[0]
+    coin_data = all_data[all_data["coin_id"] == coin_select].sort_values("date")
+    row = coin_data.iloc[-1]
     features = row[feature_cols].to_frame().T
+    features["day_of_week"] = forecast_date.dayofweek
+    features["day_of_month"] = forecast_date.day
+    features["month_num"] = forecast_date.month
+    features["is_month_end"] = int(forecast_date.is_month_end)
     probability = model.predict_proba(features)[0, 1]
     prediction = int(probability >= 0.5)
 
-    st.markdown(f"### Prediction for {coin_select} on {selected_date}")
+    source_date = row["date"].strftime("%Y-%m-%d")
+    forecast_label = forecast_date.strftime("%Y-%m-%d")
+    st.markdown(f"### Prediction for {coin_select} on {forecast_label}")
+    st.warning(f"Features are from the latest available data ({source_date}); the dataset is not real-time.")
     st.info(f"Model probability of next-day price increase: {probability:.2%}")
     if prediction == 1:
         st.success("Prediction: Next day is likely UP")
